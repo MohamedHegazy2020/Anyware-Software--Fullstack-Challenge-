@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import  { useState } from "react";
 import {
   Paper,
   Typography,
@@ -8,50 +9,28 @@ import {
   Avatar,
   Box,
   Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  Alert,
 } from "@mui/material";
 import { useQuizzes } from "../hooks/useQuizzes";
 import { useTranslation } from "react-i18next";
 import type { Quiz } from "../types/types";
+import QuizModal from "./QuizModal";
 
-interface QuizWithOptional extends Quiz {
-  author?: string;
-  dueDate?: string;
-  status?: string;
-  questions?: Question[];
-}
-
-interface Question {
-  id: string;
-  text: string;
-  options: string[];
-}
-
-function formatDate(dateStr?: string) {
-  if (!dateStr) return "-";
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return dateStr;
-  return date.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+function normalizeQuestions(
+  questions: any
+): { id: string; question: string; options: string[] }[] {
+  if (!Array.isArray(questions)) return [];
+  return questions.map((q, i) => ({
+    id: q.id || String(i),
+    question: q.question || q.text || `Question ${i + 1}`,
+    options: q.options || [],
+  }));
 }
 
 const WhatsDueList = () => {
   const { t } = useTranslation();
   const { data, isLoading, error } = useQuizzes();
   const [open, setOpen] = useState(false);
-  const [selectedQuiz, setSelectedQuiz] = useState<QuizWithOptional | null>(
-    null
-  );
+  const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
   const [answers, setAnswers] = useState<{ [questionId: string]: string }>({});
   const [showSummary, setShowSummary] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -62,7 +41,7 @@ const WhatsDueList = () => {
     setSubmitError(null);
   };
 
-  const handleOpen = (quiz: QuizWithOptional) => {
+  const handleOpen = (quiz: Quiz) => {
     setSelectedQuiz(quiz);
     resetModal();
     setOpen(true);
@@ -79,8 +58,9 @@ const WhatsDueList = () => {
   };
 
   const handleSubmit = () => {
-    if (selectedQuiz?.questions) {
-      const unanswered = selectedQuiz.questions.filter((q) => !answers[q.id]);
+    const questions = normalizeQuestions(selectedQuiz?.questions);
+    if (questions.length) {
+      const unanswered = questions.filter((q) => !answers[q.id]);
       if (unanswered.length > 0) {
         setSubmitError(t("Please answer all questions."));
         return;
@@ -101,19 +81,14 @@ const WhatsDueList = () => {
         {t("Quizzes")}
       </Typography>
       <List>
-        {data.data?.map((a: QuizWithOptional, idx: number) => (
+        {data.data?.map((a: Quiz, idx: number) => (
           <ListItem alignItems="flex-start" key={idx} sx={{ mb: 1, px: 0 }}>
             <ListItemAvatar>
-              <Avatar sx={{ bgcolor: "#1976d2" }}>
-                {a.author?.[0] ?? a.title?.[0] ?? "?"}
-              </Avatar>
+              <Avatar sx={{ bgcolor: "#1976d2" }}>{a.title?.[0] ?? "?"}</Avatar>
             </ListItemAvatar>
             <Box sx={{ flex: 1 }}>
               <Typography fontWeight={600}>
                 {a.title || t("Untitled Quiz")}
-              </Typography>
-              <Typography color="text.secondary" fontSize={13}>
-                {formatDate(a.dueDate)}
               </Typography>
               {a.description && (
                 <Typography color="text.secondary" fontSize={14}>
@@ -133,74 +108,24 @@ const WhatsDueList = () => {
           </ListItem>
         ))}
       </List>
-
-      {/* Quiz Modal */}
-      <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {selectedQuiz?.title || t("Quiz")}{" "}
-          <span style={{ fontWeight: 400, fontSize: 14, marginLeft: 8 }}>
-            {selectedQuiz?.dueDate ? formatDate(selectedQuiz.dueDate) : ""}
-          </span>
-        </DialogTitle>
-        <DialogContent>
-          {showSummary ? (
-            <Box>
-              <Typography variant="h6" mb={2}>
-                {t("Your Answers")}
-              </Typography>
-              {selectedQuiz?.questions?.map((q) => (
-                <Box key={q.id} mb={2}>
-                  <Typography fontWeight={500}>{q.text}</Typography>
-                  <Typography color="text.secondary">
-                    {answers[q.id]}
-                  </Typography>
-                </Box>
-              ))}
-              <Alert severity="success" sx={{ mt: 2 }}>
-                {t("Your answers have been submitted!")}
-              </Alert>
-            </Box>
-          ) : selectedQuiz?.questions && selectedQuiz.questions.length > 0 ? (
-            <>
-              {submitError && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {submitError}
-                </Alert>
-              )}
-              {selectedQuiz.questions.map((q) => (
-                <Box key={q.id} mb={2}>
-                  <Typography fontWeight={500}>{q.text}</Typography>
-                  <RadioGroup
-                    value={answers[q.id] || ""}
-                    onChange={(e) => handleAnswer(q.id, e.target.value)}
-                  >
-                    {q.options.map((opt, i) => (
-                      <FormControlLabel
-                        key={i}
-                        value={opt}
-                        control={<Radio />}
-                        label={opt}
-                      />
-                    ))}
-                  </RadioGroup>
-                </Box>
-              ))}
-            </>
-          ) : (
-            <Typography color="text.secondary">
-              {t("No questions available")}
-            </Typography>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClose}>{t("Close")}</Button>
-          {!showSummary && selectedQuiz?.questions?.length && (
-            <Button onClick={handleSubmit} variant="contained" color="primary">
-              {t("Submit")}
-            </Button>
-          )}
-        </DialogActions>
-      </Dialog>
+      <QuizModal
+        open={open}
+        onClose={handleClose}
+        quiz={
+          selectedQuiz
+            ? {
+                ...selectedQuiz,
+                questions: normalizeQuestions(selectedQuiz.questions),
+              }
+            : null
+        }
+        answers={answers}
+        onAnswer={handleAnswer}
+        onSubmit={handleSubmit}
+        showSummary={showSummary}
+        submitError={submitError}
+        t={t}
+      />
     </Paper>
   );
 };
